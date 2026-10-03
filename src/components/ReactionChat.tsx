@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Send, MessageSquare, Flame, Heart, ThumbsUp, DollarSign, Smile } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -14,17 +14,18 @@ export interface ReactionBubble {
 
 export const ReactionChat: React.FC = () => {
   const { socket, roomState } = useSocket();
-  const [messages, setMessages] = useState<Array<{ id: string; sender: string; text: string; time: string }>>([]);
   const [inputText, setInputText] = useState('');
   const [reactions, setReactions] = useState<ReactionBubble[]>([]);
 
   const EMOJIS = ['🔥', '👏', '🏏', '💰', '😱', '🚀', '👑'];
 
-  const sendEmoji = (emoji: string) => {
+  const sendEmoji = React.useCallback((emoji: string) => {
     const bubble: ReactionBubble = {
+      // eslint-disable-next-line react-hooks/purity
       id: `react_${Date.now()}_${Math.random()}`,
       emoji,
       senderName: 'You',
+      // eslint-disable-next-line react-hooks/purity
       x: Math.floor(Math.random() * 80) + 10,
     };
     setReactions((prev) => [...prev.slice(-10), bubble]);
@@ -33,22 +34,7 @@ export const ReactionChat: React.FC = () => {
     }, 2500);
 
     socket?.emit('send_reaction', { roomCode: roomState?.roomCode, emoji });
-  };
-
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim()) return;
-
-    const newMsg = {
-      id: `msg_${Date.now()}`,
-      sender: 'You',
-      text: inputText.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    setMessages((prev) => [newMsg, ...prev.slice(0, 19)]);
-    setInputText('');
-  };
+  }, [socket, roomState?.roomCode]);
 
   return (
     <div className="relative">

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Trophy, Gavel, ShieldCheck, HeartHandshake } from 'lucide-react';
+import { Gavel, HeartHandshake } from 'lucide-react';
 import { IPL_RULES, formatRupees } from '../config/rules';
 import { Player, TeamState } from '../types';
 

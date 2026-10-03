@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AuctionEngine } from '../src/engine/auctionEngine';
-import { MINI_MODE_RULES } from '../src/config/rules';
+
 
 describe('Phase 4: Mini Mode Pay Cap & Anti-Snipe Rules', () => {
   it('should split surplus above 18 Cr into BCCI Welfare Fund in Mini Mode', () => {

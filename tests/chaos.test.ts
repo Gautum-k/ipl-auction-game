@@ -5,7 +5,7 @@ import { AuctionRoomState } from '../src/types';
 describe('Phase 7: Chaos Testing & Resumption Verification', () => {
   it('recovers player seat ownership after socket disconnect using browser session token', () => {
     // 1. Setup room and claim team
-    let room = AuctionEngine.createInitialRoom('CHAOS1', 'Chaos Test Room', 'host_socket', 'host_session', {
+    const room = AuctionEngine.createInitialRoom('CHAOS1', 'Chaos Test Room', 'host_socket', 'host_session', {
       mode: 'MEGA_2025',
       roomSize: 10,
       timerLength: 15,

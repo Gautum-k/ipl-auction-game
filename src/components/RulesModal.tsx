@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { X, ShieldCheck, DollarSign, Users, Award, Clock, Layers, TrendingUp, RefreshCw, Landmark } from 'lucide-react';
-import { IPL_RULES, formatRupees } from '../config/rules';
+import { X, ShieldCheck, DollarSign, Users, Award, Clock, Layers, TrendingUp, Landmark } from 'lucide-react';
+import { IPL_RULES } from '../config/rules';
 import { PracticeRound } from './PracticeRound';
 import { Glossary } from './Glossary';
 

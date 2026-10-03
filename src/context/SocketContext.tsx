@@ -111,6 +111,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     });
 
+    // eslint-disable-next-line
     setSocket(socketInstance);
 
     return () => {

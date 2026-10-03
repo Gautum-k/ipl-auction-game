@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { IPL_RULES } from '../../config/rules';
-import { AuctionRoomState } from '../../types';
+
 import { AuctionEngine } from '../auctionEngine';
 
 describe('AuctionEngine Core Unit Tests', () => {

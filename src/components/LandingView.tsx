@@ -27,7 +27,9 @@ export const LandingView: React.FC = () => {
   // Reset loading state on socket error message
   useEffect(() => {
     if (errorMessage) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsCreating(false);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsJoining(false);
     }
   }, [errorMessage]);
@@ -38,7 +40,9 @@ export const LandingView: React.FC = () => {
       const urlParams = new URLSearchParams(window.location.search);
       const roomParam = urlParams.get('room');
       if (roomParam) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setJoinCode(roomParam.toUpperCase());
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setTab('JOIN');
       }
     }

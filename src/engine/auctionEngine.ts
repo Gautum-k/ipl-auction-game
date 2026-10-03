@@ -1,6 +1,6 @@
 import { IPL_RULES, getNextMinBid } from '../config/rules';
 import { INITIAL_PLAYER_DATASET } from '../data/players';
-import { AuctionRoomConfig, AuctionRoomState, BidLog, Player, TeamState } from '../types';
+import { AuctionRoomConfig, AuctionRoomState, BidLog, TeamState } from '../types';
 
 export interface ValidationResult {
   valid: boolean;
@@ -154,7 +154,7 @@ export class AuctionEngine {
     const bidAmount = amount !== undefined ? amount : minBid;
 
     const now = Date.now();
-    let secondsRemaining = Math.max(0, Math.ceil((room.timer.bidDeadline - now) / 1000));
+    const secondsRemaining = Math.max(0, Math.ceil((room.timer.bidDeadline - now) / 1000));
 
     // Anti-snipe rule: If bid placed within last 3 seconds, extend deadline by 5s!
     let newDuration = IPL_RULES.timerDurations.resetOnBidSeconds;

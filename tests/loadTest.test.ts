@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { AuctionEngine } from '../src/engine/auctionEngine';
-import { AuctionRoomState } from '../src/types';
+
 
 describe('Phase 7: Load Test & Anti-Double-Sale Verification', () => {
   it('handles 10 teams and spectators with rapid concurrent bids without double sales or timer drift', () => {
