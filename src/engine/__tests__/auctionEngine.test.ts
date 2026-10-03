@@ -157,4 +157,11 @@ describe('AuctionEngine Core Unit Tests', () => {
     expect(room.phase).toBe('UNSOLD_PAUSE');
     expect(room.unsoldPlayers.length).toBe(1);
   });
+
+  it('should maintain strict non-decreasing set order sequence in player pool', () => {
+    const room = AuctionEngine.createInitialRoom('TEST2', 'Test Set Sequence', 'socket_host_999');
+    for (let i = 0; i < room.playerPool.length - 1; i++) {
+      expect(room.playerPool[i].setNumber).toBeLessThanOrEqual(room.playerPool[i + 1].setNumber);
+    }
+  });
 });

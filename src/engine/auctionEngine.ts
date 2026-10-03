@@ -45,7 +45,7 @@ export class AuctionEngine {
       };
     });
 
-    const pool = [...INITIAL_PLAYER_DATASET].sort((a, b) => a.setNumber - b.setNumber);
+    const pool = AuctionEngine.shufflePoolBySet(INITIAL_PLAYER_DATASET);
     const firstPlayer = pool.length > 0 ? pool[0] : null;
 
     return {
@@ -442,5 +442,31 @@ export class AuctionEngine {
       },
       updatedAt: Date.now(),
     };
+  }
+
+  /**
+   * Group players by setNumber, shuffle players within each set, and return pooled array preserving set sequence.
+   */
+  public static shufflePoolBySet<T extends { setNumber: number }>(dataset: readonly T[]): T[] {
+    const setMap = new Map<number, T[]>();
+    for (const player of dataset) {
+      if (!setMap.has(player.setNumber)) {
+        setMap.set(player.setNumber, []);
+      }
+      setMap.get(player.setNumber)!.push(player);
+    }
+
+    const sortedSetNumbers = Array.from(setMap.keys()).sort((a, b) => a - b);
+    const result: T[] = [];
+
+    for (const setNum of sortedSetNumbers) {
+      const setPlayers = [...setMap.get(setNum)!];
+      for (let i = setPlayers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [setPlayers[i], setPlayers[j]] = [setPlayers[j], setPlayers[i]];
+      }
+      result.push(...setPlayers);
+    }
+    return result;
   }
 }

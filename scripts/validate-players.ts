@@ -35,7 +35,13 @@ export function validatePlayerPool(seedPath: string): { valid: boolean; errors: 
 
   let indianCount = 0;
   let overseasCount = 0;
+  let batCount = 0;
+  let bowlCount = 0;
+  let arCount = 0;
+  let wkCount = 0;
+
   const basePriceCounts: Record<number, number> = {};
+  let lastSetOrder = 0;
 
   players.forEach((p, idx) => {
     // 1. Duplicate ID check
@@ -57,6 +63,11 @@ export function validatePlayerPool(seedPath: string): { valid: boolean; errors: 
     // 2. Missing Role check
     if (!p.role || !validRoles.includes(p.role)) {
       errors.push(`Row ${idx + 1}: Missing or invalid role "${p.role}" for player "${p.name}"`);
+    } else {
+      if (p.role === 'BAT') batCount++;
+      else if (p.role === 'BOWL') bowlCount++;
+      else if (p.role === 'AR') arCount++;
+      else if (p.role === 'WK') wkCount++;
     }
 
     // 3. Missing Nationality check
@@ -71,9 +82,14 @@ export function validatePlayerPool(seedPath: string): { valid: boolean; errors: 
       basePriceCounts[p.basePrice] = (basePriceCounts[p.basePrice] || 0) + 1;
     }
 
-    // 5. Missing Set check
+    // 5. Set Order Sequence check (must be non-decreasing)
     if (!p.setName || typeof p.setOrder !== 'number') {
       errors.push(`Row ${idx + 1}: Missing set information (setName/setOrder) for player "${p.name}"`);
+    } else {
+      if (p.setOrder < lastSetOrder) {
+        errors.push(`Row ${idx + 1}: Out-of-sequence setOrder (${p.setOrder} < previous ${lastSetOrder}) for player "${p.name}"`);
+      }
+      lastSetOrder = p.setOrder;
     }
 
     if (p.isOverseas) {
@@ -83,9 +99,9 @@ export function validatePlayerPool(seedPath: string): { valid: boolean; errors: 
     }
   });
 
-  // 6. Pool size check (must be at least 180 players to fill 10 squads of 18)
-  if (players.length < 180) {
-    errors.push(`Pool size ${players.length} is too small to fill 10 squads of min 18 players (must be >= 180 players)`);
+  // 6. Pool size check (Phase 11 requirement: target 250-350 total players)
+  if (players.length < 250) {
+    errors.push(`Pool size ${players.length} is too small for expanded Mini/Mega pool (must be >= 250 players)`);
   }
 
   const valid = errors.length === 0;
@@ -97,6 +113,10 @@ export function validatePlayerPool(seedPath: string): { valid: boolean; errors: 
       total: players.length,
       indian: indianCount,
       overseas: overseasCount,
+      batters: batCount,
+      bowlers: bowlCount,
+      allRounders: arCount,
+      wicketkeepers: wkCount,
       ...basePriceCounts,
     },
   };
@@ -123,6 +143,7 @@ if (require.main === module) {
     } else {
       console.log(`✅ ${seedFile} PASSED validation!`);
       console.log(`   Total: ${res.stats.total} | Indian: ${res.stats.indian} | Overseas: ${res.stats.overseas}`);
+      console.log(`   Roles -> BAT: ${res.stats.batters} | BOWL: ${res.stats.bowlers} | AR: ${res.stats.allRounders} | WK: ${res.stats.wicketkeepers}`);
     }
   });
 
