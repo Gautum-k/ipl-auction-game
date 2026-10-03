@@ -1,10 +1,11 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
+import { INITIAL_PLAYER_DATASET } from '../data/players';
 import { AuctionEngine } from '../engine/auctionEngine';
 import { BotEngine } from '../engine/botEngine';
 import { connectToDatabase } from '../lib/db';
 import { generateRoomCode, sanitizeDisplayName } from '../lib/roomCode';
 import { AuctionRoomModel } from '../models/AuctionRoomModel';
-import { AuctionRoomState } from '../types';
+import { AuctionRoomState, Player } from '../types';
 import { logger } from '../lib/logger';
 
 // In-memory store for fast socket execution & timer loops
@@ -57,7 +58,13 @@ export async function rehydrateRoomsFromDatabase(io: SocketIOServer): Promise<vo
       roomsInMemory[room.roomCode] = room;
 
       // If timer was running when server slept/restarted, re-arm timer loop
-      if (room.timer.isRunning && (room.phase === 'BIDDING' || room.phase === 'RTM_PENDING')) {
+      if (
+        room.timer.isRunning &&
+        (room.phase === 'BIDDING' ||
+          room.phase === 'RTM_PENDING' ||
+          room.phase === 'ACCEL_NOMINATION' ||
+          room.phase === 'ACCEL_BIDDING')
+      ) {
         startRoomTimerLoop(io, room.roomCode);
       }
     }
@@ -83,7 +90,7 @@ function startRoomTimerLoop(io: SocketIOServer, roomCode: string) {
     }
 
     // AI Bot Bidding Evaluation
-    if (room.phase === 'BIDDING') {
+    if (room.phase === 'BIDDING' || room.phase === 'ACCEL_BIDDING') {
       const botDecision = BotEngine.evaluateBotBids(room);
       if (botDecision.shouldBid && botDecision.teamId) {
         try {
@@ -103,7 +110,18 @@ function startRoomTimerLoop(io: SocketIOServer, roomCode: string) {
     } else {
       // Timer expired!
       room.timer.secondsLeft = 0;
-      const nextState = AuctionEngine.handleTimerExpiry(room);
+      let nextState = room;
+
+      if (room.phase === 'ACCEL_NOMINATION') {
+        nextState = BotEngine.evaluateBotNominations(room);
+        nextState = AuctionEngine.startAcceleratedRound(nextState);
+        if (nextState.phase === 'ACCEL_BIDDING') {
+          startRoomTimerLoop(io, roomCode);
+        }
+      } else {
+        nextState = AuctionEngine.handleTimerExpiry(room);
+      }
+
       roomsInMemory[roomCode] = nextState;
 
       io.to(roomCode).emit('room_state', nextState);
@@ -430,6 +448,176 @@ export function setupSocketHandler(io: SocketIOServer): void {
 
       io.to(room.roomCode).emit('room_state', nextState);
       await persistRoomState(nextState);
+    });
+
+    // Accelerated Nomination: Nominate Player
+    socket.on('accel:nominate', async ({ roomCode, playerId }: { roomCode: string; playerId: string }) => {
+      const code = roomCode.toUpperCase();
+      const room = roomsInMemory[code];
+      if (!room || room.phase !== 'ACCEL_NOMINATION') {
+        socket.emit('error_msg', 'Room is not in accelerated nomination phase.');
+        return;
+      }
+
+      const team = Object.values(room.teams).find((t) => t.ownerSocketId === socket.id);
+      if (!team) {
+        socket.emit('error_msg', 'Only claimed team owners can nominate players.');
+        return;
+      }
+
+      const doneTeams = room.nominationDoneTeams || [];
+      if (doneTeams.includes(team.teamId)) {
+        socket.emit('error_msg', 'Your team has already marked nominations as done.');
+        return;
+      }
+
+      const unsoldPool = room.unsoldPool || [];
+      if (!unsoldPool.includes(playerId)) {
+        socket.emit('error_msg', 'Player is not in the unsold pool.');
+        return;
+      }
+
+      const player =
+        INITIAL_PLAYER_DATASET.find((p) => p.id === playerId) ||
+        room.playerPool.find((p) => p.id === playerId) ||
+        room.unsoldPlayers.find((p) => p.id === playerId);
+
+      if (!player) {
+        socket.emit('error_msg', 'Player data not found.');
+        return;
+      }
+
+      const currentNominated = room.nominations?.[team.teamId] || [];
+      if (currentNominated.includes(playerId)) {
+        return; // Already nominated
+      }
+
+      // Rule 1: Affordability check (purse >= basePrice)
+      if (team.purseRemaining < player.basePrice) {
+        socket.emit('error_msg', `Cannot afford base price of ₹${player.basePrice / 100000} Lakhs.`);
+        return;
+      }
+
+      // Rule 2: Max squad limit check (< 25)
+      if (team.squad.length + currentNominated.length >= 25) {
+        socket.emit('error_msg', 'Maximum squad size limit of 25 reached.');
+        return;
+      }
+
+      // Rule 3: Overseas cap check (< 8)
+      if (player.isOverseas) {
+        const knownMap = new Map<string, Player>();
+        INITIAL_PLAYER_DATASET.forEach((p) => knownMap.set(p.id, p));
+        room.playerPool.forEach((p) => knownMap.set(p.id, p));
+        room.unsoldPlayers.forEach((p) => knownMap.set(p.id, p));
+
+        const overseasNominatedCount = currentNominated
+          .map((id) => knownMap.get(id))
+          .filter((p): p is Player => p !== undefined && p.isOverseas).length;
+
+        const overseasSquadCount = team.squad.filter((p) => p.isOverseas).length;
+        if (overseasSquadCount + overseasNominatedCount >= 8) {
+          socket.emit('error_msg', 'Maximum overseas limit of 8 reached.');
+          return;
+        }
+      }
+
+      const updatedRoom = {
+        ...room,
+        nominations: {
+          ...(room.nominations || {}),
+          [team.teamId]: [...currentNominated, playerId],
+        },
+        updatedAt: Date.now(),
+      };
+
+      roomsInMemory[code] = updatedRoom;
+      io.to(code).emit('room_state', updatedRoom);
+      await persistRoomState(updatedRoom);
+    });
+
+    // Accelerated Nomination: Unnominate Player
+    socket.on('accel:unnominate', async ({ roomCode, playerId }: { roomCode: string; playerId: string }) => {
+      const code = roomCode.toUpperCase();
+      const room = roomsInMemory[code];
+      if (!room || room.phase !== 'ACCEL_NOMINATION') return;
+
+      const team = Object.values(room.teams).find((t) => t.ownerSocketId === socket.id);
+      if (!team) return;
+
+      const doneTeams = room.nominationDoneTeams || [];
+      if (doneTeams.includes(team.teamId)) return;
+
+      const currentNominated = room.nominations?.[team.teamId] || [];
+      const updatedNominated = currentNominated.filter((id) => id !== playerId);
+
+      const updatedRoom = {
+        ...room,
+        nominations: {
+          ...(room.nominations || {}),
+          [team.teamId]: updatedNominated,
+        },
+        updatedAt: Date.now(),
+      };
+
+      roomsInMemory[code] = updatedRoom;
+      io.to(code).emit('room_state', updatedRoom);
+      await persistRoomState(updatedRoom);
+    });
+
+    // Accelerated Nomination: Team Done
+    socket.on('accel:done', async ({ roomCode }: { roomCode: string }) => {
+      const code = roomCode.toUpperCase();
+      const room = roomsInMemory[code];
+      if (!room || room.phase !== 'ACCEL_NOMINATION') return;
+
+      const team = Object.values(room.teams).find((t) => t.ownerSocketId === socket.id);
+      if (!team) return;
+
+      const doneTeams = Array.from(new Set([...(room.nominationDoneTeams || []), team.teamId]));
+      let updatedRoom: AuctionRoomState = {
+        ...room,
+        nominationDoneTeams: doneTeams,
+        updatedAt: Date.now(),
+      };
+
+      // Check if all human teams are done
+      const humanTeams = Object.values(updatedRoom.teams).filter((t) => !t.isBot && t.ownerSocketId !== null);
+      const allHumansDone = humanTeams.every((t) => doneTeams.includes(t.teamId));
+
+      if (allHumansDone || humanTeams.length === 0) {
+        updatedRoom = BotEngine.evaluateBotNominations(updatedRoom);
+        updatedRoom = AuctionEngine.startAcceleratedRound(updatedRoom);
+        if (updatedRoom.timer.isRunning) {
+          startRoomTimerLoop(io, code);
+        }
+      }
+
+      roomsInMemory[code] = updatedRoom;
+      io.to(code).emit('room_state', updatedRoom);
+      await persistRoomState(updatedRoom);
+    });
+
+    // Accelerated Nomination: Host Force Start Bidding
+    socket.on('accel:start_bidding', async ({ roomCode }: { roomCode: string }) => {
+      const code = roomCode.toUpperCase();
+      const room = roomsInMemory[code];
+      if (!room || room.phase !== 'ACCEL_NOMINATION') return;
+
+      if (room.hostSocketId !== socket.id) {
+        socket.emit('error_msg', 'Only host can force start accelerated bidding.');
+        return;
+      }
+
+      let updatedRoom = BotEngine.evaluateBotNominations(room);
+      updatedRoom = AuctionEngine.startAcceleratedRound(updatedRoom);
+      if (updatedRoom.timer.isRunning) {
+        startRoomTimerLoop(io, code);
+      }
+
+      roomsInMemory[code] = updatedRoom;
+      io.to(code).emit('room_state', updatedRoom);
+      await persistRoomState(updatedRoom);
     });
 
     // Disconnect

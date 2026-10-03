@@ -1,6 +1,6 @@
 import { IPL_RULES, getNextMinBid } from '../config/rules';
 import { INITIAL_PLAYER_DATASET } from '../data/players';
-import { AuctionRoomConfig, AuctionRoomState, BidLog, TeamState } from '../types';
+import { AuctionRoomConfig, AuctionRoomState, BidLog, Player, TeamState } from '../types';
 
 export interface ValidationResult {
   valid: boolean;
@@ -69,6 +69,11 @@ export class AuctionEngine {
       playerPool: pool,
       soldPlayers: [],
       unsoldPlayers: [],
+      unsoldPool: [],
+      nominations: {},
+      accelList: [],
+      nominationDoneTeams: [],
+      accelNominationDeadline: undefined,
       acceleratedPool: [],
       isAcceleratedMode: false,
       timer: {
@@ -306,10 +311,17 @@ export class AuctionEngine {
   public static finalizeUnsold(room: AuctionRoomState): AuctionRoomState {
     if (!room.currentPlayer) return room;
 
+    const unsoldPool = room.unsoldPool || [];
+    const updatedUnsoldPool =
+      !room.isAcceleratedMode && !unsoldPool.includes(room.currentPlayer.id)
+        ? [...unsoldPool, room.currentPlayer.id]
+        : unsoldPool;
+
     return {
       ...room,
       phase: 'UNSOLD_PAUSE',
       unsoldPlayers: [room.currentPlayer, ...room.unsoldPlayers],
+      unsoldPool: updatedUnsoldPool,
       timer: {
         secondsLeft: IPL_RULES.timerDurations.unsoldCountdownSeconds,
         duration: IPL_RULES.timerDurations.unsoldCountdownSeconds,
@@ -360,7 +372,7 @@ export class AuctionEngine {
         highestBidderTeamId: null,
         rtmClaimedByTeamId: null,
         rtmAskingBid: null,
-        phase: 'BIDDING',
+        phase: room.isAcceleratedMode ? 'ACCEL_BIDDING' : 'BIDDING',
         timer: {
           secondsLeft: IPL_RULES.timerDurations.biddingSeconds,
           duration: IPL_RULES.timerDurations.biddingSeconds,
@@ -372,18 +384,21 @@ export class AuctionEngine {
     }
 
     // Player pool exhausted! Check if there are unsold players and not yet accelerated
-    if (room.unsoldPlayers.length > 0 && !room.isAcceleratedMode) {
+    const availableUnsoldCount = (room.unsoldPool || []).length > 0 ? room.unsoldPool.length : room.unsoldPlayers.length;
+    if (availableUnsoldCount > 0 && !room.isAcceleratedMode) {
+      const deadline = Date.now() + 90_000; // Default 90s nomination window
       return {
         ...room,
-        phase: 'NOMINATING', // Host can trigger accelerated round
+        phase: 'ACCEL_NOMINATION',
         currentPlayer: null,
         currentBid: 0,
         highestBidderTeamId: null,
+        accelNominationDeadline: deadline,
         timer: {
-          secondsLeft: 0,
-          duration: 0,
-          bidDeadline: 0,
-          isRunning: false,
+          secondsLeft: 90,
+          duration: 90,
+          bidDeadline: deadline,
+          isRunning: true,
         },
         updatedAt: Date.now(),
       };
@@ -407,41 +422,108 @@ export class AuctionEngine {
   }
 
   /**
-   * Start accelerated round with chosen unsold players
+   * Start accelerated round driven by team nominations (union de-duplicated, grouped by role, shuffled per role)
    */
-  public static startAcceleratedRound(room: AuctionRoomState, selectedUnsoldIds?: string[]): AuctionRoomState {
+  public static startAcceleratedRound(
+    room: AuctionRoomState,
+    nominationsInput?: Record<string, string[]> | string[]
+  ): AuctionRoomState {
     const soldPlayerIds = new Set(room.soldPlayers.map((s) => s.player.id));
-    const availableUnsold = room.unsoldPlayers.filter((p) => !soldPlayerIds.has(p.id));
+    let nominatedIds: string[] = [];
 
-    const poolToUse = selectedUnsoldIds
-      ? availableUnsold.filter((p) => selectedUnsoldIds.includes(p.id))
-      : [...availableUnsold];
+    if (Array.isArray(nominationsInput)) {
+      nominatedIds = nominationsInput;
+    } else if (nominationsInput && typeof nominationsInput === 'object') {
+      const set = new Set<string>();
+      Object.values(nominationsInput).forEach((list) => {
+        if (Array.isArray(list)) list.forEach((id) => set.add(id));
+      });
+      nominatedIds = Array.from(set);
+    } else if (room.nominations && Object.keys(room.nominations).length > 0) {
+      const set = new Set<string>();
+      Object.values(room.nominations).forEach((list) => {
+        if (Array.isArray(list)) list.forEach((id) => set.add(id));
+      });
+      nominatedIds = Array.from(set);
+    } else if ((room.unsoldPool || []).length > 0) {
+      nominatedIds = [...room.unsoldPool];
+    } else {
+      nominatedIds = room.unsoldPlayers.map((p) => p.id);
+    }
 
-    if (poolToUse.length === 0) {
+    // De-duplicate union and ensure no sold player enters accelerated pool
+    const uniqueNominatedIds = Array.from(new Set(nominatedIds)).filter((id) => !soldPlayerIds.has(id));
+
+    if (uniqueNominatedIds.length === 0) {
       return {
         ...room,
         phase: 'COMPLETED',
+        accelList: [],
+        currentPlayer: null,
+        currentBid: 0,
+        highestBidderTeamId: null,
         timer: { secondsLeft: 0, duration: 0, bidDeadline: 0, isRunning: false },
+        updatedAt: Date.now(),
       };
     }
 
-    const firstPlayer = poolToUse[0];
+    // Resolve full player objects
+    const allKnownPlayers = new Map<string, Player>();
+    INITIAL_PLAYER_DATASET.forEach((p) => allKnownPlayers.set(p.id, p));
+    room.playerPool.forEach((p) => allKnownPlayers.set(p.id, p));
+    room.unsoldPlayers.forEach((p) => allKnownPlayers.set(p.id, p));
+
+    const nominatedPlayerObjects = uniqueNominatedIds
+      .map((id) => allKnownPlayers.get(id))
+      .filter((p): p is Player => p !== undefined);
+
+    // Group by role: WICKETKEEPER, BATTER, ALL_ROUNDER, BOWLER
+    const roleOrder = ['WICKETKEEPER', 'BATTER', 'ALL_ROUNDER', 'BOWLER'];
+    const groupedByRole: Record<string, Player[]> = {
+      WICKETKEEPER: [],
+      BATTER: [],
+      ALL_ROUNDER: [],
+      BOWLER: [],
+    };
+
+    for (const player of nominatedPlayerObjects) {
+      const r = player.role || 'BATTER';
+      if (!groupedByRole[r]) {
+        groupedByRole[r] = [];
+      }
+      groupedByRole[r].push(player);
+    }
+
+    const accelPool: Player[] = [];
+    for (const role of roleOrder) {
+      const group = groupedByRole[role] || [];
+      // Shuffle within each role group
+      for (let i = group.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [group[i], group[j]] = [group[j], group[i]];
+      }
+      accelPool.push(...group);
+    }
+
+    const accelList = accelPool.map((p) => p.id);
+    const firstPlayer = accelPool.length > 0 ? accelPool[0] : null;
 
     return {
       ...room,
       isAcceleratedMode: true,
-      playerPool: poolToUse,
+      accelList,
+      playerPool: accelPool,
       currentPlayerIndex: 0,
+      currentSetIndex: firstPlayer ? firstPlayer.setNumber : room.currentSetIndex,
       currentPlayer: firstPlayer,
       currentBid: 0,
       highestBidderTeamId: null,
-      unsoldPlayers: [],
-      phase: 'BIDDING',
+      phase: firstPlayer ? 'ACCEL_BIDDING' : 'COMPLETED',
       timer: {
         secondsLeft: IPL_RULES.timerDurations.biddingSeconds,
         duration: IPL_RULES.timerDurations.biddingSeconds,
         bidDeadline: Date.now() + IPL_RULES.timerDurations.biddingSeconds * 1000,
-        isRunning: true,
+        isRunning: !!firstPlayer,
       },
       updatedAt: Date.now(),
     };

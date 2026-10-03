@@ -30,6 +30,10 @@ interface SocketContextType {
   exerciseRtm: (roomCode: string, teamId: string, decision: 'ACCEPT' | 'DECLINE') => void;
   togglePause: (roomCode: string) => void;
   startAccelerated: (roomCode: string, selectedUnsoldIds?: string[]) => void;
+  nominatePlayer: (roomCode: string, playerId: string) => void;
+  unnominatePlayer: (roomCode: string, playerId: string) => void;
+  markNominationDone: (roomCode: string) => void;
+  startAcceleratedBidding: (roomCode: string) => void;
 }
 
 const SocketContext = createContext<SocketContextType>({
@@ -49,6 +53,10 @@ const SocketContext = createContext<SocketContextType>({
   exerciseRtm: () => {},
   togglePause: () => {},
   startAccelerated: () => {},
+  nominatePlayer: () => {},
+  unnominatePlayer: () => {},
+  markNominationDone: () => {},
+  startAcceleratedBidding: () => {},
 });
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -268,6 +276,22 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socket?.emit('start_accelerated', { roomCode, selectedUnsoldIds });
   };
 
+  const nominatePlayer = (roomCode: string, playerId: string) => {
+    socket?.emit('accel:nominate', { roomCode, playerId });
+  };
+
+  const unnominatePlayer = (roomCode: string, playerId: string) => {
+    socket?.emit('accel:unnominate', { roomCode, playerId });
+  };
+
+  const markNominationDone = (roomCode: string) => {
+    socket?.emit('accel:done', { roomCode });
+  };
+
+  const startAcceleratedBidding = (roomCode: string) => {
+    socket?.emit('accel:start_bidding', { roomCode });
+  };
+
   return (
     <SocketContext.Provider
       value={{
@@ -287,6 +311,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         exerciseRtm,
         togglePause,
         startAccelerated,
+        nominatePlayer,
+        unnominatePlayer,
+        markNominationDone,
+        startAcceleratedBidding,
       }}
     >
       {children}

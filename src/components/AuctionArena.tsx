@@ -22,6 +22,7 @@ import { ReactionChat } from './ReactionChat';
 import { TeamLiveCard } from './TeamLiveCard';
 import { UpcomingQueuePanel } from './UpcomingQueuePanel';
 import { MyTeamPanel } from './MyTeamPanel';
+import { AccelNominationView } from './AccelNominationView';
 import { Avatar } from './ui/Avatar';
 import { CountdownRing } from './ui/CountdownRing';
 import confetti from 'canvas-confetti';
@@ -87,6 +88,10 @@ export const AuctionArena: React.FC = () => {
       });
     }
   }, [roomState?.phase]);
+
+  if (roomState?.phase === 'ACCEL_NOMINATION') {
+    return <AccelNominationView />;
+  }
 
   if (!roomState || !roomState.currentPlayer) return null;
 

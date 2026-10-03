@@ -204,4 +204,72 @@ describe('AuctionEngine Core Unit Tests', () => {
     const uniqueSoldIds = new Set(soldIds);
     expect(soldIds.length).toBe(uniqueSoldIds.size);
   });
+
+  describe('Phase 13: Accelerated nomination flow & validation rules', () => {
+    it('should populate unsoldPool on unsold players and guarantee no SOLD player enters unsoldPool', () => {
+      let room = AuctionEngine.createInitialRoom('TEST_P13_1', 'Phase 13 Test', 'socket_host');
+      room.phase = 'BIDDING';
+
+      // 1. Sell first player
+      const soldPlayerId = room.currentPlayer!.id;
+      room = AuctionEngine.finalizeSale(room, 'CSK', 2_00_00_000, false);
+      expect(room.unsoldPool).not.toContain(soldPlayerId);
+
+      // 2. Advance and finalize second player as unsold
+      room = AuctionEngine.advanceToNextPlayer(room);
+      const unsoldPlayerId = room.currentPlayer!.id;
+      room = AuctionEngine.finalizeUnsold(room);
+
+      expect(room.unsoldPool).toContain(unsoldPlayerId);
+      expect(room.unsoldPool).not.toContain(soldPlayerId);
+    });
+
+    it('should build accelList as de-duplicated union of nominations grouped by role without duplicates or sold players', () => {
+      let room = AuctionEngine.createInitialRoom('TEST_P13_2', 'Phase 13 Test 2', 'socket_host');
+      room.phase = 'BIDDING';
+
+      // Mark 4 players: 1 sold, 3 unsold
+      const p1 = room.playerPool[0]; // will be sold
+      room = AuctionEngine.finalizeSale(room, 'CSK', 2_00_00_000, false);
+      room = AuctionEngine.advanceToNextPlayer(room);
+
+      const p2 = room.playerPool[1]; // unsold
+      const p3 = room.playerPool[2]; // unsold
+      const p4 = room.playerPool[3]; // unsold
+
+      for (let i = 0; i < 3; i++) {
+        room = AuctionEngine.finalizeUnsold(room);
+        room = AuctionEngine.advanceToNextPlayer(room);
+      }
+
+      // Nominations: Team CSK nominates p1 (sold), p2, p3; Team MI nominates p3, p4
+      room.nominations = {
+        CSK: [p1.id, p2.id, p3.id],
+        MI: [p3.id, p4.id],
+      };
+
+      const accelRoom = AuctionEngine.startAcceleratedRound(room);
+      expect(accelRoom.phase).toBe('ACCEL_BIDDING');
+      expect(accelRoom.accelList).not.toContain(p1.id); // sold player excluded
+      expect(accelRoom.accelList).toContain(p2.id);
+      expect(accelRoom.accelList).toContain(p3.id);
+      expect(accelRoom.accelList).toContain(p4.id);
+
+      // De-duplicated check
+      const uniqueAccelIds = new Set(accelRoom.accelList);
+      expect(accelRoom.accelList.length).toBe(uniqueAccelIds.size);
+    });
+
+    it('should transition to ACCEL_NOMINATION when main pool is exhausted', () => {
+      let room = AuctionEngine.createInitialRoom('TEST_P13_3', 'Phase 13 Transition', 'socket_host');
+      room.phase = 'BIDDING';
+      room.unsoldPool = ['p_unsold_1', 'p_unsold_2'];
+      room.currentPlayerIndex = room.playerPool.length - 1; // Last player
+
+      room = AuctionEngine.advanceToNextPlayer(room);
+      expect(room.phase).toBe('ACCEL_NOMINATION');
+      expect(room.accelNominationDeadline).toBeGreaterThan(Date.now());
+      expect(room.timer.secondsLeft).toBe(90);
+    });
+  });
 });

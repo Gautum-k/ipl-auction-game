@@ -23,6 +23,11 @@ const AuctionRoomSchema = new Schema<IAuctionRoomDocument>(
     playerPool: { type: Schema.Types.Mixed, required: true },
     soldPlayers: { type: Schema.Types.Mixed, default: [] },
     unsoldPlayers: { type: Schema.Types.Mixed, default: [] },
+    unsoldPool: { type: Schema.Types.Mixed, default: [] },
+    nominations: { type: Schema.Types.Mixed, default: {} },
+    accelList: { type: Schema.Types.Mixed, default: [] },
+    nominationDoneTeams: { type: Schema.Types.Mixed, default: [] },
+    accelNominationDeadline: { type: Number, default: null },
     acceleratedPool: { type: Schema.Types.Mixed, default: [] },
     isAcceleratedMode: { type: Boolean, default: false },
     timer: {

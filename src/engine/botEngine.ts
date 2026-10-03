@@ -1,4 +1,5 @@
-import { AuctionRoomState } from '../types';
+import { INITIAL_PLAYER_DATASET } from '../data/players';
+import { AuctionRoomState, Player } from '../types';
 import { AuctionEngine } from './auctionEngine';
 
 export class BotEngine {
@@ -45,6 +46,61 @@ export class BotEngine {
       shouldBid: true,
       teamId: chosenBot.teamId,
       amount: minBid,
+    };
+  }
+
+  /**
+   * Auto-nominates unsold players for bot teams based on squad needs
+   */
+  public static evaluateBotNominations(room: AuctionRoomState): AuctionRoomState {
+    if (room.phase !== 'ACCEL_NOMINATION') return room;
+
+    const knownPlayersMap = new Map<string, Player>();
+    INITIAL_PLAYER_DATASET.forEach((p) => knownPlayersMap.set(p.id, p));
+    room.playerPool.forEach((p) => knownPlayersMap.set(p.id, p));
+    room.unsoldPlayers.forEach((p) => knownPlayersMap.set(p.id, p));
+
+    const unsoldIds = room.unsoldPool || [];
+    const nominations = { ...(room.nominations || {}) };
+    const doneTeams = new Set(room.nominationDoneTeams || []);
+
+    Object.values(room.teams).forEach((team) => {
+      const isBotTeam = team.isBot || (room.config.fillWithBots && !team.ownerSocketId);
+      if (!isBotTeam || doneTeams.has(team.teamId)) return;
+
+      const currentNominated = nominations[team.teamId] || [];
+      const currentOverseasNominated = currentNominated
+        .map((id) => knownPlayersMap.get(id))
+        .filter((p) => p && p.isOverseas).length;
+
+      const currentOverseasCount = team.squad.filter((p) => p.isOverseas).length;
+      const targetNominationCount = Math.max(3, 25 - team.squad.length);
+
+      const botPicks: string[] = [...currentNominated];
+
+      for (const pId of unsoldIds) {
+        if (botPicks.length >= targetNominationCount) break;
+        if (botPicks.includes(pId)) continue;
+
+        const player = knownPlayersMap.get(pId);
+        if (!player) continue;
+
+        // Validation rules: purse, squad < 25, overseas < 8
+        if (player.basePrice > team.purseRemaining) continue;
+        if (team.squad.length + botPicks.length >= 25) break;
+        if (player.isOverseas && currentOverseasCount + currentOverseasNominated >= 8) continue;
+
+        botPicks.push(pId);
+      }
+
+      nominations[team.teamId] = botPicks;
+      doneTeams.add(team.teamId);
+    });
+
+    return {
+      ...room,
+      nominations,
+      nominationDoneTeams: Array.from(doneTeams),
     };
   }
 }

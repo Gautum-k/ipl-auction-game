@@ -44,6 +44,8 @@ export type UserRole = 'HOST' | 'PLAYER' | 'SPECTATOR';
 export type AuctionPhase =
   | 'LOBBY'
   | 'NOMINATING'
+  | 'ACCEL_NOMINATION'
+  | 'ACCEL_BIDDING'
   | 'BIDDING'
   | 'RTM_PENDING'
   | 'SOLD_PAUSE'
@@ -104,6 +106,11 @@ export interface AuctionRoomState {
   playerPool: Player[];
   soldPlayers: SoldRecord[];
   unsoldPlayers: Player[];
+  unsoldPool: string[]; // Player IDs of players unsold during main sets
+  nominations: Record<string, string[]>; // teamId -> playerIds
+  accelList: string[]; // De-duplicated role-grouped shuffled union of playerIds
+  nominationDoneTeams: string[]; // teamIds that completed nomination
+  accelNominationDeadline?: number; // Server-side timestamp for nomination expiry
   acceleratedPool: Player[];
   isAcceleratedMode: boolean;
   timer: {
