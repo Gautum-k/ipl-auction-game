@@ -1,0 +1,16 @@
+[
+  {
+    "cricsheetId": "unk_999",
+    "name": "Unverified Prospect",
+    "role": "BAT",
+    "nationality": "India",
+    "isOverseas": false,
+    "isCapped": false,
+    "basePrice": 20,
+    "setName": "Unverified Set",
+    "setOrder": 99,
+    "previousTeam": "CSK",
+    "sourceUrl": "https://unverified-blog.example.com",
+    "confidence": "low"
+  }
+]

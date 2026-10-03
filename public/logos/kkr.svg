@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <circle cx="50" cy="50" r="48" fill="#3A225D" stroke="#F7D000" stroke-width="4"/>
+  <text x="50" y="58" font-family="system-ui, sans-serif" font-size="28" font-weight="900" fill="#F7D000" text-anchor="middle">KKR</text>
+</svg>

@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: ipl-auction-room
+    env: node
+    plan: free
+    buildCommand: npm install --legacy-peer-deps && npm run build
+    startCommand: npx tsx server.ts
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
