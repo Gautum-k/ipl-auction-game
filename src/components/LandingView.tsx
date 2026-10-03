@@ -1,13 +1,30 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Trophy, Plus, LogIn, Shield, Sparkles, Zap, Loader2 } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { motion } from 'framer-motion';
 
 export const LandingView: React.FC = () => {
   const { createRoom, joinRoom, errorMessage } = useSocket();
-  const [tab, setTab] = useState<'CREATE' | 'JOIN'>('CREATE');
+
+  // Lazy initialize join code and tab from URL search params
+  const [tab, setTab] = useState<'CREATE' | 'JOIN'>(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('room') ? 'JOIN' : 'CREATE';
+    }
+    return 'CREATE';
+  });
+
+  const [joinCode, setJoinCode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomParam = urlParams.get('room');
+      return roomParam ? roomParam.toUpperCase() : '';
+    }
+    return '';
+  });
 
   // Create Form State
   const [roomName, setRoomName] = useState("IPL Mega Auction 2026");
@@ -20,29 +37,18 @@ export const LandingView: React.FC = () => {
   const [createTimeoutError, setCreateTimeoutError] = useState<string | null>(null);
 
   // Join Form State
-  const [joinCode, setJoinCode] = useState('');
   const [joinUserName, setJoinUserName] = useState('');
   const [isJoining, setIsJoining] = useState(false);
 
-  // Reset loading state on socket error message
-  useEffect(() => {
+  // Synchronize loading reset with errorMessage during render phase
+  const [prevErrorMessage, setPrevErrorMessage] = useState(errorMessage);
+  if (errorMessage !== prevErrorMessage) {
+    setPrevErrorMessage(errorMessage);
     if (errorMessage) {
       setIsCreating(false);
       setIsJoining(false);
     }
-  }, [errorMessage]);
-
-  // Auto-fill join code from URL query string ?room=CODE
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const roomParam = urlParams.get('room');
-      if (roomParam) {
-        setJoinCode(roomParam.toUpperCase());
-        setTab('JOIN');
-      }
-    }
-  }, []);
+  }
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -256,6 +262,17 @@ export const LandingView: React.FC = () => {
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                 placeholder="e.g. IPL992"
                 className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-amber-400 text-center font-mono font-bold text-lg uppercase tracking-widest"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">Your Name (Optional)</label>
+              <input
+                type="text"
+                value={joinUserName}
+                onChange={(e) => setJoinUserName(e.target.value)}
+                placeholder="e.g. Team Manager"
+                className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-amber-400 text-sm font-medium"
               />
             </div>
 

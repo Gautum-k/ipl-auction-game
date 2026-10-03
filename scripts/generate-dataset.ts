@@ -40,7 +40,11 @@ export interface RuntimePlayer {
 }
 
 // Helper converter to RuntimePlayer
-function convertToRuntimePlayer(seed: SeedPlayer, index: number, stats: any): RuntimePlayer {
+function convertToRuntimePlayer(
+  seed: SeedPlayer,
+  index: number,
+  stats: RuntimePlayer['stats']
+): RuntimePlayer {
   let role: 'BATTER' | 'BOWLER' | 'ALL_ROUNDER' | 'WICKETKEEPER';
   if (seed.role === 'BAT') role = 'BATTER';
   else if (seed.role === 'BOWL') role = 'BOWLER';

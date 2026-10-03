@@ -36,7 +36,8 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   private handleGoHome = () => {
-    window.location.assign('/');
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.href = '/';
   };
 
   public render() {
