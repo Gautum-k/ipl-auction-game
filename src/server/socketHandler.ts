@@ -246,6 +246,9 @@ export function setupSocketHandler(io: SocketIOServer): void {
         if (sessionToken) {
           Object.values(room.teams).forEach((t) => {
             if (t.ownerSessionToken === sessionToken) {
+              if (t.ownerSocketId && t.ownerSocketId !== socket.id) {
+                io.to(t.ownerSocketId).emit('session_replaced', 'Your seat was taken over by a newer browser tab.');
+              }
               t.ownerSocketId = socket.id;
             }
           });

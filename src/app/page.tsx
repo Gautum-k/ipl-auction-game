@@ -9,7 +9,7 @@ import { PostAuctionDashboard } from '../components/PostAuctionDashboard';
 import { AlertTriangle, X, Loader2 } from 'lucide-react';
 
 export default function Home() {
-  const { roomState, errorMessage, clearError, isRehydrating } = useSocket();
+  const { roomState, errorMessage, clearError, isRehydrating, leaveRoom } = useSocket();
 
   return (
     <div className="min-h-screen flex flex-col justify-between relative bg-slate-950 text-white">
@@ -30,12 +30,18 @@ export default function Home() {
       <main className="flex-1">
         {isRehydrating ? (
           <div className="min-h-[80vh] flex flex-col items-center justify-center space-y-4">
-            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col items-center gap-3 text-center max-w-xs">
+            <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col items-center gap-4 text-center max-w-xs">
               <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
               <div>
                 <p className="text-sm font-bold text-white">Reconnecting to Auction Arena</p>
                 <p className="text-xs text-slate-400 mt-1">Rehydrating your live auction room state...</p>
               </div>
+              <button
+                onClick={leaveRoom}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold transition"
+              >
+                Back to Home
+              </button>
             </div>
           </div>
         ) : !roomState ? (

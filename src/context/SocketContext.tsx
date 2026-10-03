@@ -13,6 +13,7 @@ interface SocketContextType {
   roomState: AuctionRoomState | null;
   errorMessage: string | null;
   clearError: () => void;
+  leaveRoom: () => void;
   createRoom: (
     roomName: string,
     hostName: string,
@@ -38,6 +39,7 @@ const SocketContext = createContext<SocketContextType>({
   roomState: null,
   errorMessage: null,
   clearError: () => {},
+  leaveRoom: () => {},
   createRoom: () => {},
   joinRoom: () => {},
   claimTeam: () => {},
@@ -80,7 +82,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const params = new URLSearchParams(window.location.search);
         const targetRoom = params.get('room') || localStorage.getItem('last_ipl_room');
         if (targetRoom) {
-          const sessionToken = getOrCreateSessionToken();
+          const sessionToken = getOrCreateSessionToken(targetRoom);
           console.log(`🔄 Rehydrating room session for room: ${targetRoom}`);
           socketInstance.emit('join_room', { roomCode: targetRoom, sessionToken });
         } else {
@@ -136,6 +138,20 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
     });
 
+    socketInstance.on('session_replaced', (msg: string) => {
+      setIsRehydrating(false);
+      setErrorMessage(msg);
+      setRoomState(null);
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('room')) {
+          url.searchParams.delete('room');
+          window.history.replaceState(null, '', url.pathname + (url.search ? url.search : ''));
+        }
+        localStorage.removeItem('last_ipl_room');
+      }
+    });
+
     socketInstance.on('error_msg', (msg: string) => {
       setIsRehydrating(false);
       setErrorMessage(msg);
@@ -167,7 +183,44 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
+  // Enforce 5-second maximum rehydration timeout guard
+  useEffect(() => {
+    if (isRehydrating) {
+      const timer = setTimeout(() => {
+        setIsRehydrating((curr) => {
+          if (curr) {
+            setErrorMessage('Reconnecting to room timed out. Please verify your room code or connection.');
+            if (typeof window !== 'undefined') {
+              const url = new URL(window.location.href);
+              if (url.searchParams.has('room')) {
+                url.searchParams.delete('room');
+                window.history.replaceState(null, '', url.pathname + (url.search ? url.search : ''));
+              }
+              localStorage.removeItem('last_ipl_room');
+            }
+            return false;
+          }
+          return false;
+        });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isRehydrating]);
+
   const clearError = () => setErrorMessage(null);
+
+  const leaveRoom = () => {
+    setRoomState(null);
+    setIsRehydrating(false);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('room')) {
+        url.searchParams.delete('room');
+        window.history.replaceState(null, '', url.pathname + (url.search ? url.search : ''));
+      }
+      localStorage.removeItem('last_ipl_room');
+    }
+  };
 
   const createRoom = (
     roomName: string,
@@ -182,12 +235,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const joinRoom = (roomCode: string, userName?: string) => {
-    const sessionToken = getOrCreateSessionToken();
+    const sessionToken = getOrCreateSessionToken(roomCode);
     socket?.emit('join_room', { roomCode, sessionToken, userName });
   };
 
   const claimTeam = (roomCode: string, teamId: string, ownerName: string) => {
-    const sessionToken = getOrCreateSessionToken();
+    const sessionToken = getOrCreateSessionToken(roomCode);
     socket?.emit('claim_team', { roomCode, teamId, ownerName, sessionToken });
   };
 
@@ -224,6 +277,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         roomState,
         errorMessage,
         clearError,
+        leaveRoom,
         createRoom,
         joinRoom,
         claimTeam,
