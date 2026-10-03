@@ -36,7 +36,7 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   private handleGoHome = () => {
-    window.location.href = '/';
+    window.location.assign('/');
   };
 
   public render() {
@@ -51,7 +51,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="space-y-2">
               <h2 className="text-2xl font-black tracking-tight">Something Went Wrong</h2>
               <p className="text-xs text-slate-400 leading-relaxed">
-                An unexpected interface error occurred. Don't worry, your auction room state and bids are safely stored on the server!
+                An unexpected interface error occurred. Don&apos;t worry, your auction room state and bids are safely stored on the server!
               </p>
               {this.state.error && (
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-rose-300 text-left overflow-x-auto max-h-24">

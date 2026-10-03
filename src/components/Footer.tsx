@@ -1,17 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
 export const Footer: React.FC = () => {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   return (
     <footer className="w-full bg-slate-950 border-t border-slate-900 py-6 px-4 text-slate-400 text-xs mt-auto">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
         <div className="space-y-1">
           <p className="font-semibold text-slate-300">
-            IPL Auction Room &copy; {mounted ? new Date().getFullYear() : ''} — Free & Open Source (MIT License)
+            IPL Auction Room &copy; {new Date().getFullYear()} — Free & Open Source (MIT License)
           </p>
           <p className="text-slate-500 max-w-2xl leading-relaxed">
             <strong>Disclaimer:</strong> This is an unofficial fan project and is NOT affiliated with, authorized by,

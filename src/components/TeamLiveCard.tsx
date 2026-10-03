@@ -2,8 +2,8 @@
 
 import React, { memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronUp, AlertCircle, Shield } from 'lucide-react';
-import { TeamState, Player, SoldRecord } from '../types';
+import { ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { TeamState, Player } from '../types';
 import { formatRupees } from '../config/rules';
 
 interface TeamLiveCardProps {

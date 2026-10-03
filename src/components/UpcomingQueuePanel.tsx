@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Layers, ChevronDown, ChevronUp, User, Globe, Radio } from 'lucide-react';
+import { Layers, ChevronDown, ChevronUp, User, Radio } from 'lucide-react';
 import { Player } from '../types';
 import { formatRupees } from '../config/rules';
 

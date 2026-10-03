@@ -3,25 +3,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Trophy,
   Clock,
   Zap,
   Gavel,
   Pause,
   Play,
   Award,
-  Users,
-  ChevronDown,
-  ChevronUp,
-  CheckCircle2,
-  XCircle,
   Flame,
-  PieChart,
-  Landmark,
-  Sparkles,
   Layers,
-  Shield,
-  Radio,
   AlertCircle,
 } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
@@ -36,35 +25,34 @@ import { MyTeamPanel } from './MyTeamPanel';
 import { Avatar } from './ui/Avatar';
 import { CountdownRing } from './ui/CountdownRing';
 import confetti from 'canvas-confetti';
-import { Player } from '../types';
 
 export const AuctionArena: React.FC = () => {
   const { roomState, socket, isConnected, placeBid, exerciseRtm, togglePause, startAccelerated } = useSocket();
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [rightPanelTab, setRightPanelTab] = useState<'PURSES' | 'MY_TEAM' | 'UPCOMING' | 'SOLD' | 'UNSOLD'>('PURSES');
 
-  if (!roomState || !roomState.currentPlayer) return null;
-
-  const player = roomState.currentPlayer;
-  const isHost = socket?.id === roomState.hostSocketId;
-  const currentModeRules = roomState.config.mode === 'MEGA_2025' ? MEGA_MODE_RULES : MINI_MODE_RULES;
-
   // Find user's claimed team
   const myTeam = useMemo(() => {
+    if (!roomState) return null;
     return Object.values(roomState.teams).find((t) => t.ownerSocketId === socket?.id);
-  }, [roomState.teams, socket?.id]);
+  }, [roomState, socket?.id]);
+
+  const player = roomState?.currentPlayer;
+  const isHost = socket?.id === roomState?.hostSocketId;
+  const currentModeRules = roomState?.config.mode === 'MEGA_2025' ? MEGA_MODE_RULES : MINI_MODE_RULES;
 
   // Overseas counts for user's team
   const myTeamOverseasCount = myTeam ? myTeam.squad.filter((p) => p.isOverseas).length : 0;
   const myTeamOverseasLeft = 8 - myTeamOverseasCount;
-  const isOverseasLimitReached = player.isOverseas && myTeamOverseasLeft === 0;
+  const isOverseasLimitReached = player?.isOverseas && myTeamOverseasLeft === 0;
 
-  const minBid = getNextMinBid(roomState.currentBid, player.basePrice, currentModeRules);
+  const minBid = player ? getNextMinBid(roomState.currentBid, player.basePrice, currentModeRules) : 0;
 
   // Validation for bid button
-  const rawValidation = myTeam
-    ? AuctionEngine.validateBid(roomState, myTeam.teamId, minBid)
-    : { valid: false, reason: 'Must claim a team to bid' };
+  const rawValidation = useMemo(() => {
+    if (!roomState || !myTeam) return { valid: false, reason: 'Must claim a team to bid' };
+    return AuctionEngine.validateBid(roomState, myTeam.teamId, minBid);
+  }, [roomState, myTeam, minBid]);
 
   // Overseas slot override warning if 0 left
   const validationResult = isOverseasLimitReached
@@ -73,41 +61,44 @@ export const AuctionArena: React.FC = () => {
 
   const canIBid =
     myTeam &&
-    roomState.phase === 'BIDDING' &&
+    roomState?.phase === 'BIDDING' &&
     roomState.highestBidderTeamId !== myTeam.teamId &&
     validationResult.valid;
 
   // Keyboard shortcut: Spacebar to place minimum bid
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && canIBid && myTeam) {
+      if (e.code === 'Space' && canIBid && myTeam && roomState) {
         e.preventDefault();
         placeBid(roomState.roomCode, myTeam.teamId, minBid);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canIBid, myTeam, minBid, roomState.roomCode, placeBid]);
+  }, [canIBid, myTeam, minBid, roomState, placeBid]);
 
   // Confetti on SOLD event
   useEffect(() => {
-    if (roomState.phase === 'SOLD_PAUSE') {
+    if (roomState?.phase === 'SOLD_PAUSE') {
       confetti({
         particleCount: 100,
         spread: 80,
         origin: { y: 0.6 },
       });
     }
-  }, [roomState.phase]);
+  }, [roomState?.phase]);
 
+  if (!roomState || !roomState.currentPlayer) return null;
+
+  const activePlayer = roomState.currentPlayer;
   const highBidderTeam = roomState.highestBidderTeamId ? roomState.teams[roomState.highestBidderTeamId] : null;
   const leadingTeamConfig = highBidderTeam
     ? IPL_RULES.teamOptions.find((t) => t.id === highBidderTeam.teamId)
     : null;
   const leadingColor = leadingTeamConfig?.primaryColor || '#F59E0B';
 
-  const originalTeam = player.originalTeamId ? roomState.teams[player.originalTeamId] : null;
-  const isRtmOwner = myTeam && player.originalTeamId === myTeam.teamId;
+  const originalTeam = activePlayer.originalTeamId ? roomState.teams[activePlayer.originalTeamId] : null;
+  const isRtmOwner = myTeam && activePlayer.originalTeamId === myTeam.teamId;
 
   const lastSoldRecord = roomState.soldPlayers.length > 0 ? roomState.soldPlayers[0] : null;
   const winningTeamForOverlay = lastSoldRecord ? roomState.teams[lastSoldRecord.soldToTeamId] : null;
@@ -143,7 +134,7 @@ export const AuctionArena: React.FC = () => {
       )}
 
       {/* Full Screen Unsold Overlay */}
-      {roomState.phase === 'UNSOLD_PAUSE' && <UnsoldOverlay player={player} />}
+      {roomState.phase === 'UNSOLD_PAUSE' && <UnsoldOverlay player={activePlayer} />}
 
       {/* Top Banner: Mode Callout & Official Set Sequence Banner */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-4.5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-900 border border-slate-800 shadow-xl">
@@ -162,8 +153,8 @@ export const AuctionArena: React.FC = () => {
           {/* Official Auction Set Indicator */}
           <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300">
             <Layers className="w-3.5 h-3.5 text-amber-400" />
-            <span>SET {player.setNumber}:</span>
-            <span className="text-amber-400 font-extrabold">{player.setName}</span>
+            <span>SET {activePlayer.setNumber}:</span>
+            <span className="text-amber-400 font-extrabold">{activePlayer.setName}</span>
           </div>
 
           <span className="text-xs text-slate-400 font-medium">
@@ -212,26 +203,26 @@ export const AuctionArena: React.FC = () => {
             <div className="relative z-10 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
               {/* Player Avatar & Monogram */}
               <div className="md:col-span-5 flex flex-col items-center justify-center text-center space-y-4">
-                <Avatar name={player.name} size="xl" />
+                <Avatar name={activePlayer.name} size="xl" />
 
                 <div className="space-y-1">
-                  <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white">{player.name}</h3>
+                  <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white">{activePlayer.name}</h3>
                   <div className="flex items-center justify-center gap-2 text-xs flex-wrap">
                     <span className="px-2.5 py-0.5 rounded-md bg-slate-800 text-slate-300 font-semibold">
-                      {player.role}
+                      {activePlayer.role}
                     </span>
-                    {player.isOverseas && (
+                    {activePlayer.isOverseas && (
                       <span className="px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30">
                         ✈️ Overseas
                       </span>
                     )}
                     <span className="text-slate-400">•</span>
-                    <span className="text-slate-300 font-medium">{player.country}</span>
+                    <span className="text-slate-300 font-medium">{activePlayer.country}</span>
                   </div>
                 </div>
 
                 {/* Bidding-time Overseas Slot Indicator on Spotlight Card */}
-                {player.isOverseas && myTeam && (
+                {activePlayer.isOverseas && myTeam && (
                   <div
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 ${
                       myTeamOverseasLeft === 0
@@ -253,7 +244,7 @@ export const AuctionArena: React.FC = () => {
                 <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
                   <div>
                     <span className="text-xs text-slate-400 uppercase font-semibold">Base Reserve Price</span>
-                    <p className="text-xl font-bold text-amber-400">{formatRupees(player.basePrice)}</p>
+                    <p className="text-xl font-bold text-amber-400">{formatRupees(activePlayer.basePrice)}</p>
                   </div>
                   <div className="text-right">
                     <span className="text-xs text-slate-400 uppercase font-semibold">Previous Team</span>
@@ -265,27 +256,27 @@ export const AuctionArena: React.FC = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                   <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
                     <span className="block text-[11px] text-slate-400">IPL Matches</span>
-                    <span className="font-bold text-sm text-white">{player.stats.matches}</span>
+                    <span className="font-bold text-sm text-white">{activePlayer.stats.matches}</span>
                   </div>
 
-                  {player.stats.runs !== undefined && (
+                  {activePlayer.stats.runs !== undefined && (
                     <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
                       <span className="block text-[11px] text-slate-400">Runs</span>
-                      <span className="font-bold text-sm text-white">{player.stats.runs}</span>
+                      <span className="font-bold text-sm text-white">{activePlayer.stats.runs}</span>
                     </div>
                   )}
 
-                  {player.stats.wickets !== undefined && (
+                  {activePlayer.stats.wickets !== undefined && (
                     <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
                       <span className="block text-[11px] text-slate-400">Wickets</span>
-                      <span className="font-bold text-sm text-white">{player.stats.wickets}</span>
+                      <span className="font-bold text-sm text-white">{activePlayer.stats.wickets}</span>
                     </div>
                   )}
 
-                  {player.stats.strikeRate !== undefined && (
+                  {activePlayer.stats.strikeRate !== undefined && (
                     <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
                       <span className="block text-[11px] text-slate-400">Strike Rate</span>
-                      <span className="font-bold text-sm text-amber-400">{player.stats.strikeRate}</span>
+                      <span className="font-bold text-sm text-amber-400">{activePlayer.stats.strikeRate}</span>
                     </div>
                   )}
                 </div>
@@ -460,7 +451,7 @@ export const AuctionArena: React.FC = () => {
                       isExpanded={isExpanded}
                       onToggleExpand={() => setExpandedTeamId(isExpanded ? null : team.teamId)}
                       soldPlayers={roomState.soldPlayers}
-                      isOverseasAuction={player.isOverseas}
+                      isOverseasAuction={activePlayer.isOverseas}
                       primaryColor={teamConfig?.primaryColor}
                       secondaryColor={teamConfig?.secondaryColor}
                     />
@@ -584,7 +575,7 @@ export const AuctionArena: React.FC = () => {
               <div>
                 <h3 className="text-xl font-bold">Right To Match (RTM) Opportunity!</h3>
                 <p className="text-xs text-slate-400">
-                  {player.name} originally belonged to your team ({myTeam.shortName}).
+                  {activePlayer.name} originally belonged to your team ({myTeam.shortName}).
                 </p>
               </div>
             </div>

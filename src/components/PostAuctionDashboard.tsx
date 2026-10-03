@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Trophy, Award, Users, Star, ArrowLeft, Share2, ShieldCheck, Download, DollarSign, PieChart } from 'lucide-react';
+import { Trophy, Users, Share2, Download, DollarSign, PieChart } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { formatRupees, MEGA_MODE_RULES } from '../config/rules';
-import { Player, TeamState } from '../types';
+import { TeamState } from '../types';
 
 export const PostAuctionDashboard: React.FC = () => {
   const { roomState } = useSocket();
@@ -38,7 +38,6 @@ export const PostAuctionDashboard: React.FC = () => {
     // 2. Value-for-Money Score (out of 100)
     let vfmScore = 75;
     if (squad.length > 0) {
-      const avgPrice = (initialPurse - team.purseRemaining) / squad.length;
       const totalBasePrice = squad.reduce((sum, p) => sum + (p.basePrice || 2_00_00_000), 0);
       const spendRatio = totalSpent / Math.max(1, totalBasePrice);
       

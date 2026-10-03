@@ -1,9 +1,8 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'framer-motion';
-import { Shield, Users, DollarSign, Award, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { TeamState, Player, SoldRecord } from '../types';
+import { Shield, Users, Award, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { TeamState, Player } from '../types';
 import { formatRupees } from '../config/rules';
 
 interface MyTeamPanelProps {

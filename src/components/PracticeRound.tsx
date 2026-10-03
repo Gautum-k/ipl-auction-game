@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Play, RotateCcw, HelpCircle, Trophy, Gavel, Zap, CheckCircle2 } from 'lucide-react';
-import { formatRupees, getNextMinBid, MEGA_MODE_RULES } from '../config/rules';
+import { Play, RotateCcw, HelpCircle, Trophy, Gavel } from 'lucide-react';
+import { formatRupees, getNextMinBid } from '../config/rules';
 import { Avatar } from './ui/Avatar';
 import { CountdownRing } from './ui/CountdownRing';
 
@@ -12,7 +11,6 @@ export const PracticeRound: React.FC = () => {
   const [currentBid, setCurrentBid] = useState(2_00_00_000); // 2 Cr
   const [highBidder, setHighBidder] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(15);
-  const [userPurse, setUserPurse] = useState(120_00_00_000); // 120 Cr
   const [isUserHighBidder, setIsUserHighBidder] = useState(false);
   const [stepTooltip, setStepTooltip] = useState('Click "Start Practice Bid" to test bidding against AI bots!');
 
@@ -42,7 +40,7 @@ export const PracticeRound: React.FC = () => {
       }, 1000);
     }
     return () => clearTimeout(timer);
-  }, [inProgress, secondsLeft, isUserHighBidder, currentBid]);
+  }, [inProgress, secondsLeft, isUserHighBidder, currentBid, player.basePrice]);
 
   const handleStart = () => {
     setInProgress(true);

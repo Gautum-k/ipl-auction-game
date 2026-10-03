@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, HelpCircle } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 
 export const Glossary: React.FC = () => {
   const terms = [
