@@ -164,4 +164,44 @@ describe('AuctionEngine Core Unit Tests', () => {
       expect(room.playerPool[i].setNumber).toBeLessThanOrEqual(room.playerPool[i + 1].setNumber);
     }
   });
+
+  it('should guarantee zero duplicate sold player IDs across full auction flow including accelerated round', () => {
+    let room = AuctionEngine.createInitialRoom('TEST3', 'Test Uniqueness', 'socket_host_888');
+    room.phase = 'BIDDING';
+    room.teams['CSK'].ownerSocketId = 'socket_csk';
+    room.teams['MI'].ownerSocketId = 'socket_mi';
+
+    // Sell first 5 players to CSK
+    for (let i = 0; i < 5; i++) {
+      room.highestBidderTeamId = 'CSK';
+      room.currentBid = 2_00_00_000;
+      room = AuctionEngine.handleTimerExpiry(room); // SOLD_PAUSE
+      room = AuctionEngine.advanceToNextPlayer(room); // BIDDING
+    }
+
+    // Leave next 5 players unsold
+    for (let i = 0; i < 5; i++) {
+      room.highestBidderTeamId = null;
+      room = AuctionEngine.handleTimerExpiry(room); // UNSOLD_PAUSE
+      room = AuctionEngine.advanceToNextPlayer(room); // BIDDING
+    }
+
+    // Trigger accelerated round with unsold players
+    const unsoldIds = room.unsoldPlayers.map((p) => p.id);
+    room = AuctionEngine.startAcceleratedRound(room, unsoldIds);
+    expect(room.isAcceleratedMode).toBe(true);
+
+    // Sell accelerated players to MI
+    while (room.currentPlayer && room.phase === 'BIDDING') {
+      room.highestBidderTeamId = 'MI';
+      room.currentBid = 50_00_000;
+      room = AuctionEngine.handleTimerExpiry(room); // SOLD_PAUSE
+      room = AuctionEngine.advanceToNextPlayer(room);
+    }
+
+    // Assert zero duplicate player IDs across all sold records
+    const soldIds = room.soldPlayers.map((s) => s.player.id);
+    const uniqueSoldIds = new Set(soldIds);
+    expect(soldIds.length).toBe(uniqueSoldIds.size);
+  });
 });

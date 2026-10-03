@@ -9,6 +9,7 @@ import { AuctionRoomState } from '../types';
 interface SocketContextType {
   socket: Socket | null;
   isConnected: boolean;
+  isRehydrating: boolean;
   roomState: AuctionRoomState | null;
   errorMessage: string | null;
   clearError: () => void;
@@ -33,6 +34,7 @@ interface SocketContextType {
 const SocketContext = createContext<SocketContextType>({
   socket: null,
   isConnected: false,
+  isRehydrating: false,
   roomState: null,
   errorMessage: null,
   clearError: () => {},
@@ -52,6 +54,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isConnected, setIsConnected] = useState(false);
   const [roomState, setRoomState] = useState<AuctionRoomState | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isRehydrating, setIsRehydrating] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlRoom = params.get('room');
+      const savedRoom = localStorage.getItem('last_ipl_room');
+      return Boolean(urlRoom || savedRoom);
+    }
+    return false;
+  });
 
   useEffect(() => {
     const socketUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
@@ -63,6 +74,19 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socketInstance.on('connect', () => {
       console.log('⚡ Socket connected to server');
       setIsConnected(true);
+
+      // Auto-rejoin stored or URL room on connection / page refresh
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const targetRoom = params.get('room') || localStorage.getItem('last_ipl_room');
+        if (targetRoom) {
+          const sessionToken = getOrCreateSessionToken();
+          console.log(`🔄 Rehydrating room session for room: ${targetRoom}`);
+          socketInstance.emit('join_room', { roomCode: targetRoom, sessionToken });
+        } else {
+          setIsRehydrating(false);
+        }
+      }
     });
 
     socketInstance.on('disconnect', () => {
@@ -71,6 +95,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     socketInstance.on('room_state', (state: AuctionRoomState) => {
+      setIsRehydrating(false);
       setRoomState((prevState) => {
         // Trigger sounds on state changes
         if (prevState && prevState.currentPlayer?.id !== state.currentPlayer?.id) {
@@ -79,6 +104,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
         return state;
       });
+
+      // Synchronize URL and local storage with active room code
+      if (state.roomCode && typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('room') !== state.roomCode) {
+          url.searchParams.set('room', state.roomCode);
+          window.history.replaceState(null, '', url.pathname + url.search);
+        }
+        localStorage.setItem('last_ipl_room', state.roomCode);
+      }
     });
 
     socketInstance.on('bid_sound', () => {
@@ -102,12 +137,25 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     socketInstance.on('error_msg', (msg: string) => {
+      setIsRehydrating(false);
       setErrorMessage(msg);
+      // If error occurs during rehydration, clean up URL and local storage
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('room')) {
+          url.searchParams.delete('room');
+          window.history.replaceState(null, '', url.pathname + (url.search ? url.search : ''));
+        }
+        localStorage.removeItem('last_ipl_room');
+      }
     });
 
     socketInstance.on('room_created', ({ roomCode }: { roomCode: string }) => {
       if (typeof window !== 'undefined') {
         localStorage.setItem('last_ipl_room', roomCode);
+        const url = new URL(window.location.href);
+        url.searchParams.set('room', roomCode);
+        window.history.replaceState(null, '', url.pathname + url.search);
       }
     });
 
@@ -172,6 +220,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       value={{
         socket,
         isConnected,
+        isRehydrating,
         roomState,
         errorMessage,
         clearError,

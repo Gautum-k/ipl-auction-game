@@ -410,9 +410,12 @@ export class AuctionEngine {
    * Start accelerated round with chosen unsold players
    */
   public static startAcceleratedRound(room: AuctionRoomState, selectedUnsoldIds?: string[]): AuctionRoomState {
+    const soldPlayerIds = new Set(room.soldPlayers.map((s) => s.player.id));
+    const availableUnsold = room.unsoldPlayers.filter((p) => !soldPlayerIds.has(p.id));
+
     const poolToUse = selectedUnsoldIds
-      ? room.unsoldPlayers.filter((p) => selectedUnsoldIds.includes(p.id))
-      : [...room.unsoldPlayers];
+      ? availableUnsold.filter((p) => selectedUnsoldIds.includes(p.id))
+      : [...availableUnsold];
 
     if (poolToUse.length === 0) {
       return {

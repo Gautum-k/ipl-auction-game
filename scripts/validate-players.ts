@@ -82,10 +82,13 @@ export function validatePlayerPool(seedPath: string): { valid: boolean; errors: 
       basePriceCounts[p.basePrice] = (basePriceCounts[p.basePrice] || 0) + 1;
     }
 
-    // 5. Set Order Sequence check (must be non-decreasing)
+    // 5. Set Order Sequence check (must be non-decreasing and within range 1-16)
     if (!p.setName || typeof p.setOrder !== 'number') {
       errors.push(`Row ${idx + 1}: Missing set information (setName/setOrder) for player "${p.name}"`);
     } else {
+      if (p.setOrder < 1 || p.setOrder > 16) {
+        errors.push(`Row ${idx + 1}: Invalid setOrder ${p.setOrder} for player "${p.name}" (must be 1-16)`);
+      }
       if (p.setOrder < lastSetOrder) {
         errors.push(`Row ${idx + 1}: Out-of-sequence setOrder (${p.setOrder} < previous ${lastSetOrder}) for player "${p.name}"`);
       }
@@ -99,9 +102,9 @@ export function validatePlayerPool(seedPath: string): { valid: boolean; errors: 
     }
   });
 
-  // 6. Pool size check (Phase 11 requirement: target 250-350 total players)
-  if (players.length < 250) {
-    errors.push(`Pool size ${players.length} is too small for expanded Mini/Mega pool (must be >= 250 players)`);
+  // 6. Pool size check (Phase 12 requirement: target 350-400+ total players)
+  if (players.length < 300) {
+    errors.push(`Pool size ${players.length} is too small for expanded Mini/Mega pool (must be >= 300 players)`);
   }
 
   const valid = errors.length === 0;
