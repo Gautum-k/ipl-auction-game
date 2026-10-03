@@ -75,6 +75,14 @@ export interface SpectatorUser {
   name: string;
 }
 
+export interface SoldRecord {
+  player: Player;
+  soldToTeamId: string;
+  amount: number;
+  isRtm: boolean;
+  bcciWelfareFund?: number; // Mini mode overseas pay cap surplus
+}
+
 export interface AuctionRoomState {
   roomCode: string;
   roomName: string;
@@ -94,13 +102,7 @@ export interface AuctionRoomState {
   bidHistory: BidLog[];
   teams: Record<string, TeamState>;
   playerPool: Player[];
-  soldPlayers: Array<{
-    player: Player;
-    soldToTeamId: string;
-    amount: number;
-    isRtm: boolean;
-    bcciWelfareFund?: number; // Mini mode overseas pay cap surplus
-  }>;
+  soldPlayers: SoldRecord[];
   unsoldPlayers: Player[];
   acceleratedPool: Player[];
   isAcceleratedMode: boolean;

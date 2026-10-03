@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -18,13 +20,19 @@ import {
   Landmark,
   Sparkles,
   Layers,
+  Shield,
+  Radio,
+  AlertCircle,
 } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
-import { formatRupees, getNextMinBid } from '../config/rules';
+import { formatRupees, getNextMinBid, IPL_RULES, MEGA_MODE_RULES, MINI_MODE_RULES } from '../config/rules';
 import { AuctionEngine } from '../engine/auctionEngine';
 import { SoldOverlay } from './SoldOverlay';
 import { UnsoldOverlay } from './UnsoldOverlay';
 import { ReactionChat } from './ReactionChat';
+import { TeamLiveCard } from './TeamLiveCard';
+import { UpcomingQueuePanel } from './UpcomingQueuePanel';
+import { MyTeamPanel } from './MyTeamPanel';
 import { Avatar } from './ui/Avatar';
 import { CountdownRing } from './ui/CountdownRing';
 import confetti from 'canvas-confetti';
@@ -33,24 +41,36 @@ import { Player } from '../types';
 export const AuctionArena: React.FC = () => {
   const { roomState, socket, isConnected, placeBid, exerciseRtm, togglePause, startAccelerated } = useSocket();
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
-  const [rightPanelTab, setRightPanelTab] = useState<'PURSES' | 'SOLD' | 'UNSOLD'>('PURSES');
+  const [rightPanelTab, setRightPanelTab] = useState<'PURSES' | 'MY_TEAM' | 'UPCOMING' | 'SOLD' | 'UNSOLD'>('PURSES');
 
   if (!roomState || !roomState.currentPlayer) return null;
 
   const player = roomState.currentPlayer;
   const isHost = socket?.id === roomState.hostSocketId;
+  const currentModeRules = roomState.config.mode === 'MEGA_2025' ? MEGA_MODE_RULES : MINI_MODE_RULES;
 
   // Find user's claimed team
   const myTeam = useMemo(() => {
     return Object.values(roomState.teams).find((t) => t.ownerSocketId === socket?.id);
   }, [roomState.teams, socket?.id]);
 
-  const minBid = getNextMinBid(roomState.currentBid, player.basePrice);
+  // Overseas counts for user's team
+  const myTeamOverseasCount = myTeam ? myTeam.squad.filter((p) => p.isOverseas).length : 0;
+  const myTeamOverseasLeft = 8 - myTeamOverseasCount;
+  const isOverseasLimitReached = player.isOverseas && myTeamOverseasLeft === 0;
+
+  const minBid = getNextMinBid(roomState.currentBid, player.basePrice, currentModeRules);
 
   // Validation for bid button
-  const validationResult = myTeam
+  const rawValidation = myTeam
     ? AuctionEngine.validateBid(roomState, myTeam.teamId, minBid)
     : { valid: false, reason: 'Must claim a team to bid' };
+
+  // Overseas slot override warning if 0 left
+  const validationResult = isOverseasLimitReached
+    ? { valid: false, reason: 'Overseas limit reached (8/8 used)' }
+    : rawValidation;
+
   const canIBid =
     myTeam &&
     roomState.phase === 'BIDDING' &&
@@ -81,21 +101,22 @@ export const AuctionArena: React.FC = () => {
   }, [roomState.phase]);
 
   const highBidderTeam = roomState.highestBidderTeamId ? roomState.teams[roomState.highestBidderTeamId] : null;
+  const leadingTeamConfig = highBidderTeam
+    ? IPL_RULES.teamOptions.find((t) => t.id === highBidderTeam.teamId)
+    : null;
+  const leadingColor = leadingTeamConfig?.primaryColor || '#F59E0B';
+
   const originalTeam = player.originalTeamId ? roomState.teams[player.originalTeamId] : null;
   const isRtmOwner = myTeam && player.originalTeamId === myTeam.teamId;
 
   const lastSoldRecord = roomState.soldPlayers.length > 0 ? roomState.soldPlayers[0] : null;
   const winningTeamForOverlay = lastSoldRecord ? roomState.teams[lastSoldRecord.soldToTeamId] : null;
 
-  // Lookup exact price paid for a bought player
-  const getPlayerBoughtAmount = (targetPlayerId: string, fallbackBase: number) => {
-    const record = roomState.soldPlayers.find((s) => s.player.id === targetPlayerId);
-    return record ? record.amount : fallbackBase;
-  };
+  const myTeamColorConfig = myTeam ? IPL_RULES.teamOptions.find((t) => t.id === myTeam.teamId) : null;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6 text-white relative">
-      {/* Friendly Reconnecting Overlay */}
+      {/* Reconnecting Overlay */}
       {!isConnected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
           <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 text-center space-y-3 shadow-2xl">
@@ -141,7 +162,7 @@ export const AuctionArena: React.FC = () => {
           {/* Official Auction Set Indicator */}
           <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300">
             <Layers className="w-3.5 h-3.5 text-amber-400" />
-            <span>SET {player.setNumber} OF 8:</span>
+            <span>SET {player.setNumber}:</span>
             <span className="text-amber-400 font-extrabold">{player.setName}</span>
           </div>
 
@@ -195,12 +216,12 @@ export const AuctionArena: React.FC = () => {
 
                 <div className="space-y-1">
                   <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white">{player.name}</h3>
-                  <div className="flex items-center justify-center gap-2 text-xs">
+                  <div className="flex items-center justify-center gap-2 text-xs flex-wrap">
                     <span className="px-2.5 py-0.5 rounded-md bg-slate-800 text-slate-300 font-semibold">
                       {player.role}
                     </span>
                     {player.isOverseas && (
-                      <span className="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 font-bold border border-sky-500/20">
+                      <span className="px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30">
                         ✈️ Overseas
                       </span>
                     )}
@@ -208,6 +229,23 @@ export const AuctionArena: React.FC = () => {
                     <span className="text-slate-300 font-medium">{player.country}</span>
                   </div>
                 </div>
+
+                {/* Bidding-time Overseas Slot Indicator on Spotlight Card */}
+                {player.isOverseas && myTeam && (
+                  <div
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 ${
+                      myTeamOverseasLeft === 0
+                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                        : 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+                    }`}
+                  >
+                    {myTeamOverseasLeft === 0 ? <AlertCircle className="w-3.5 h-3.5 text-rose-400" /> : null}
+                    <span>
+                      Overseas: <strong className="underline">{myTeamOverseasCount}/8 used</strong>
+                      {myTeamOverseasLeft === 0 ? ' (0 slots left — Bidding Blocked)' : ` (${myTeamOverseasLeft} left)`}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Stats & Current Bid Info */}
@@ -252,22 +290,55 @@ export const AuctionArena: React.FC = () => {
                   )}
                 </div>
 
-                {/* Current Bid & Countdown Ring */}
-                <div className="relative rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-amber-500/30 p-4 flex items-center justify-between shadow-inner">
-                  <div>
-                    <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">Current High Bid</span>
-                    <p className="text-3xl font-black text-amber-400">
-                      {roomState.currentBid > 0 ? formatRupees(roomState.currentBid) : 'No Bids Yet'}
-                    </p>
+                {/* Requirement 8: Live Bid-Leader Animated Container (Color Tweening + Directional Slide + Pulse) */}
+                <motion.div
+                  animate={{
+                    backgroundColor: highBidderTeam ? `${leadingColor}18` : 'rgba(2, 6, 23, 0.8)',
+                    borderColor: highBidderTeam ? `${leadingColor}70` : 'rgba(245, 158, 11, 0.3)',
+                    boxShadow: highBidderTeam ? `0 0 24px ${leadingColor}30` : 'none',
+                  }}
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
+                  className="relative rounded-2xl border p-4 flex items-center justify-between shadow-inner"
+                >
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">Current High Bid</span>
+                      {/* Leading Team Logo / Short Name Badge */}
+                      {highBidderTeam && (
+                        <span
+                          className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shadow-sm transition-all"
+                          style={{ backgroundColor: leadingColor, color: '#0F172A' }}
+                        >
+                          {highBidderTeam.shortName} LEADING
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Animated Bid Amount (Pulse + Directional Slide/Fade) */}
+                    <div className="h-10 flex items-center overflow-hidden">
+                      <AnimatePresence mode="wait">
+                        <motion.span
+                          key={roomState.currentBid}
+                          initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: [1, 1.1, 1] }}
+                          exit={{ opacity: 0, y: 10 }}
+                          transition={{ duration: 0.22, ease: 'easeOut' }}
+                          className="text-3xl font-black font-mono block"
+                          style={{ color: highBidderTeam ? leadingColor : '#F59E0B' }}
+                        >
+                          {roomState.currentBid > 0 ? formatRupees(roomState.currentBid) : 'No Bids Yet'}
+                        </motion.span>
+                      </AnimatePresence>
+                    </div>
                   </div>
 
                   <CountdownRing secondsLeft={roomState.timer.secondsLeft} duration={roomState.timer.duration} size={64} />
-                </div>
+                </motion.div>
 
                 {highBidderTeam && (
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
                     <Gavel className="w-4 h-4" />
-                    <span>Highest Bidder: {highBidderTeam.teamName} ({highBidderTeam.ownerName})</span>
+                    <span>Highest Bidder: {highBidderTeam.teamName} ({highBidderTeam.ownerName || 'User'})</span>
                   </div>
                 )}
               </div>
@@ -285,7 +356,7 @@ export const AuctionArena: React.FC = () => {
 
             {myTeam ? (
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs text-slate-300">
+                <div className="flex items-center justify-between text-xs text-slate-300 flex-wrap gap-2">
                   <span>
                     Your Franchise: <strong className="text-amber-400">{myTeam.teamName}</strong> ({myTeam.shortName})
                   </span>
@@ -323,22 +394,38 @@ export const AuctionArena: React.FC = () => {
           <ReactionChat />
         </div>
 
-        {/* Right 5 Cols: Franchises Purses, Bought Players with Amounts & Tracker Tabs */}
+        {/* Right 5 Cols: Strategic Tabbed Panel (Purses | My Team | Up Next | Sold | Unsold) */}
         <div className="lg:col-span-5 space-y-6">
           <div className="rounded-3xl bg-slate-900 border border-slate-800 p-5 space-y-4 shadow-xl">
-            {/* Header Tabs: Franchises Purses | Sold Players | Unsold Players */}
-            <div className="grid grid-cols-3 p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold">
+            {/* Strategy Header Tabs */}
+            <div className="grid grid-cols-5 p-1 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-bold gap-0.5">
               <button
                 onClick={() => setRightPanelTab('PURSES')}
-                className={`py-2 rounded-lg transition text-center ${
+                className={`py-2 rounded-lg transition text-center truncate ${
                   rightPanelTab === 'PURSES' ? 'bg-amber-400 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 Purses ({Object.keys(roomState.teams).length})
               </button>
               <button
+                onClick={() => setRightPanelTab('MY_TEAM')}
+                className={`py-2 rounded-lg transition text-center truncate ${
+                  rightPanelTab === 'MY_TEAM' ? 'bg-amber-400 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                My Team
+              </button>
+              <button
+                onClick={() => setRightPanelTab('UPCOMING')}
+                className={`py-2 rounded-lg transition text-center truncate ${
+                  rightPanelTab === 'UPCOMING' ? 'bg-amber-400 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Up Next
+              </button>
+              <button
                 onClick={() => setRightPanelTab('SOLD')}
-                className={`py-2 rounded-lg transition text-center ${
+                className={`py-2 rounded-lg transition text-center truncate ${
                   rightPanelTab === 'SOLD' ? 'bg-amber-400 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -346,7 +433,7 @@ export const AuctionArena: React.FC = () => {
               </button>
               <button
                 onClick={() => setRightPanelTab('UNSOLD')}
-                className={`py-2 rounded-lg transition text-center ${
+                className={`py-2 rounded-lg transition text-center truncate ${
                   rightPanelTab === 'UNSOLD' ? 'bg-amber-400 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -354,141 +441,60 @@ export const AuctionArena: React.FC = () => {
               </button>
             </div>
 
-            {/* TAB 1: Franchises Purses & Expandable Purchased Roster with Prices */}
+            {/* TAB 1: All-Teams Live Panel with Scoped Updates */}
             {rightPanelTab === 'PURSES' && (
-              <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
+              <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
                 {Object.values(roomState.teams).map((team) => {
                   const isHighBidder = roomState.highestBidderTeamId === team.teamId;
                   const isMyFranchise = myTeam?.teamId === team.teamId;
                   const isExpanded = expandedTeamId === team.teamId;
-
-                  const batCount = team.squad.filter((p) => p.role === 'BATTER').length;
-                  const bowlCount = team.squad.filter((p) => p.role === 'BOWLER').length;
-                  const arCount = team.squad.filter((p) => p.role === 'ALL_ROUNDER').length;
-                  const wkCount = team.squad.filter((p) => p.role === 'WICKETKEEPER').length;
-                  const overseasCount = team.squad.filter((p) => p.isOverseas).length;
+                  const teamConfig = IPL_RULES.teamOptions.find((t) => t.id === team.teamId);
 
                   return (
-                    <div
+                    <TeamLiveCard
                       key={team.teamId}
-                      className={`rounded-2xl border text-xs overflow-hidden transition ${
-                        isHighBidder
-                          ? 'bg-amber-500/10 border-amber-500/50 shadow-sm'
-                          : isMyFranchise
-                          ? 'bg-slate-900 border-amber-400/40 shadow-sm'
-                          : 'bg-slate-950/60 border-slate-800/80'
-                      }`}
-                    >
-                      {/* Franchise Row Card */}
-                      <div
-                        onClick={() => setExpandedTeamId(isExpanded ? null : team.teamId)}
-                        className="p-3.5 cursor-pointer hover:bg-slate-800/50 transition flex items-center justify-between"
-                      >
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-white text-sm">{team.shortName}</span>
-                            {isMyFranchise && (
-                              <span className="px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[10px]">
-                                MY TEAM
-                              </span>
-                            )}
-                            {team.ownerName && (
-                              <span className="text-[11px] text-slate-400 font-normal">({team.ownerName})</span>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-slate-400 block">
-                            Squad: {team.squad.length} / 25 • Overseas: {overseasCount}/8
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <span className="font-mono font-bold text-emerald-400 text-sm block">
-                              {formatRupees(team.purseRemaining)}
-                            </span>
-                            <span className="text-[10px] text-slate-400">Purse Left</span>
-                          </div>
-                          {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                        </div>
-                      </div>
-
-                      {/* Squad Balance Strip */}
-                      <div className="grid grid-cols-5 gap-1 text-[10px] text-center p-2 bg-slate-950/80 border-t border-slate-800/60">
-                        <div className="p-1 rounded bg-slate-900 text-slate-300">
-                          <span className="block text-slate-400">BAT</span>
-                          <span className="font-bold">{batCount}</span>
-                        </div>
-                        <div className="p-1 rounded bg-slate-900 text-slate-300">
-                          <span className="block text-slate-400">BOWL</span>
-                          <span className="font-bold">{bowlCount}</span>
-                        </div>
-                        <div className="p-1 rounded bg-slate-900 text-slate-300">
-                          <span className="block text-slate-400">AR</span>
-                          <span className="font-bold">{arCount}</span>
-                        </div>
-                        <div className="p-1 rounded bg-slate-900 text-slate-300">
-                          <span className="block text-slate-400">WK</span>
-                          <span className="font-bold">{wkCount}</span>
-                        </div>
-                        <div className="p-1 rounded bg-slate-900 text-sky-400 font-bold">
-                          <span className="block text-slate-400">OVS</span>
-                          <span>{overseasCount}/8</span>
-                        </div>
-                      </div>
-
-                      {/* Expandable Purchased Players List with Amounts */}
-                      <AnimatePresence>
-                        {isExpanded && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="p-3 bg-slate-900/90 border-t border-slate-800 space-y-2"
-                          >
-                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                              Purchased Players Roster ({team.squad.length})
-                            </span>
-
-                            {team.squad.length > 0 ? (
-                              <div className="space-y-1.5">
-                                {team.squad.map((boughtPlayer, idx) => {
-                                  const amountPaid = getPlayerBoughtAmount(boughtPlayer.id, boughtPlayer.basePrice);
-                                  return (
-                                    <div
-                                      key={boughtPlayer.id}
-                                      className="flex items-center justify-between p-2 rounded-xl bg-slate-950 border border-slate-800 text-[11px]"
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-slate-400 font-mono">{idx + 1}.</span>
-                                        <span className="font-bold text-white">{boughtPlayer.name}</span>
-                                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">
-                                          {boughtPlayer.role}
-                                        </span>
-                                      </div>
-                                      <span className="font-mono font-bold text-amber-400">
-                                        {formatRupees(amountPaid)}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-slate-500 italic block py-2 text-center">
-                                No players purchased yet by {team.shortName}.
-                              </span>
-                            )}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
+                      team={team}
+                      maxPurse={currentModeRules.maxPursePerTeam}
+                      isMyFranchise={isMyFranchise}
+                      isHighBidder={isHighBidder}
+                      isExpanded={isExpanded}
+                      onToggleExpand={() => setExpandedTeamId(isExpanded ? null : team.teamId)}
+                      soldPlayers={roomState.soldPlayers}
+                      isOverseasAuction={player.isOverseas}
+                      primaryColor={teamConfig?.primaryColor}
+                      secondaryColor={teamConfig?.secondaryColor}
+                    />
                   );
                 })}
               </div>
             )}
 
-            {/* TAB 2: Sold Players Feed */}
+            {/* TAB 2: Dedicated "My Team" Strategic View */}
+            {rightPanelTab === 'MY_TEAM' && (
+              <div className="max-h-[560px] overflow-y-auto pr-1">
+                <MyTeamPanel
+                  myTeam={myTeam || null}
+                  maxPurse={currentModeRules.maxPursePerTeam}
+                  soldPlayers={roomState.soldPlayers}
+                  mode={roomState.config.mode}
+                  teamColor={myTeamColorConfig?.primaryColor}
+                />
+              </div>
+            )}
+
+            {/* TAB 3: Upcoming Queue & Sets Preview */}
+            {rightPanelTab === 'UPCOMING' && (
+              <div className="max-h-[560px] overflow-y-auto pr-1">
+                <UpcomingQueuePanel
+                  playerPool={roomState.playerPool}
+                  currentPlayerIndex={roomState.currentPlayerIndex}
+                />
+              </div>
+            )}
+
+            {/* TAB 4: Sold Players Feed */}
             {rightPanelTab === 'SOLD' && (
-              <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[560px] overflow-y-auto pr-1">
                 {roomState.soldPlayers.length > 0 ? (
                   roomState.soldPlayers.map((soldRecord, idx) => {
                     const buyerTeam = roomState.teams[soldRecord.soldToTeamId];
@@ -532,9 +538,9 @@ export const AuctionArena: React.FC = () => {
               </div>
             )}
 
-            {/* TAB 3: Unsold Players Feed */}
+            {/* TAB 5: Unsold Players Feed */}
             {rightPanelTab === 'UNSOLD' && (
-              <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[560px] overflow-y-auto pr-1">
                 {roomState.unsoldPlayers.length > 0 ? (
                   roomState.unsoldPlayers.map((unsoldPlayer) => (
                     <div
@@ -611,4 +617,3 @@ export const AuctionArena: React.FC = () => {
     </div>
   );
 };
-

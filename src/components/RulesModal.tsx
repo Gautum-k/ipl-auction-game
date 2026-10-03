@@ -45,7 +45,9 @@ export const RulesModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               <Users className="w-4 h-4" /> Squad & Overseas Limits
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Squad size: <strong>{IPL_RULES.minSquadSize} to {IPL_RULES.maxSquadSize} players</strong>. Max overseas players allowed: <strong>{IPL_RULES.maxOverseasPlayers}</strong>.
+              Squad size: <strong>{IPL_RULES.minSquadSize} to {IPL_RULES.maxSquadSize} players</strong>. Max overseas players allowed: <strong>{IPL_RULES.maxOverseasPlayers} per squad</strong>.
+              During live bidding, every team card and spotlight panel displays a real-time <strong>&quot;Overseas: X/8 used&quot;</strong> indicator.
+              Teams with 0 overseas slots left are visually disabled from bidding on overseas players to prevent illegal roster composition!
             </p>
           </div>
 
